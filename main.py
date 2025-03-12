@@ -658,10 +658,10 @@ class NiuniuPlugin(Star):
             await asyncio.sleep(delay_seconds)
             
             # 构建消息链
-            message_chain = MessageChain([
-                At(qq=user_id),
-                Plain(f" 小南娘：{nickname}，你的工作时间结束了哦~")
-            ])
+#            message_chain = MessageChain([
+#                At(qq=user_id),
+#                Plain(f" 小南娘：{nickname}，你的工作时间结束了哦~")
+#            ])
             
             # 直接发送消息
             await self.context.send_message(unified_msg_origin, message_chain)
