@@ -659,7 +659,7 @@ class NiuniuPlugin(Star):
             # 构建消息链
             message_chain = MessageChain([
                 At(qq=user_id),
-                #Plain(f" 小南娘：{nickname}，你的工作时间结束了哦~")
+                # Plain(f" 小南娘：{nickname}，你的工作时间结束了哦~")
             ])
             
             # 直接发送消息
