@@ -36,9 +36,9 @@ class NiuniuPlugin(Star):
     COMPARE_COOLDOWN = 180   # 比划冷却
     LOCK_COOLDOWN = 300      # 锁牛牛冷却时间 5分钟
     INVITE_LIMIT = 3         # 邀请次数限制
-    MAX_WORK_HOURS = 6       # 最大打工时长（小时）
+    MAX_WORK_HOURS = 16       # 最大打工时长（小时）
     WORK_REWARD_INTERVAL = 600  # 打工奖励间隔（秒）
-    WORK_REWARD_COINS = 5     # 每10分钟打工奖励金币数
+    WORK_REWARD_COINS = 7     # 每10分钟打工奖励金币数
 
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -146,7 +146,7 @@ class NiuniuPlugin(Star):
             },
             'ranking': {
                 'header': "🏅 牛牛排行榜 TOP10：\n",
-                'no_data': "📭 本群暂无牛牛数据",
+                'no_data': "凼 本群暂无牛牛数据",
                 'item': "{rank}. {name} ➜ {length}"
             },
             'menu': {
@@ -269,21 +269,21 @@ class NiuniuPlugin(Star):
                 return str(comp.qq)
         return None
 
-    def parse_target(self, event):
+    def parse_target(self, event, command_prefix):
         """解析@目标或用户名"""
         for comp in event.message_obj.message:
             if isinstance(comp, At):
                 return str(comp.qq)
         msg = event.message_str.strip()
-        if msg.startswith("比划比划"):
-            target_name = msg[len("比划比划"):].strip()
+        if msg.startswith(command_prefix):
+            target_name = msg[len(command_prefix):].strip()
             if target_name:
                 group_id = str(event.message_obj.group_id)
                 group_data = self.get_group_data(group_id)
                 for user_id, user_data in group_data.items():
                     if isinstance(user_data, dict):  # 检查 user_data 是否为字典
                         nickname = user_data.get('nickname', '')
-                        if re.search(re.escape(target_name), nickname, re.IGNORECASE):
+                        if nickname and target_name in nickname:
                             return user_id
         return None
 
@@ -335,6 +335,12 @@ class NiuniuPlugin(Star):
         group_id = str(event.message_obj.group_id)
         msg = event.message_str.strip()
 
+        # 添加破锁命令处理
+        if msg.startswith("破锁"):
+            async for result in self._handle_lockbreaker(event):
+                yield result
+            return
+    
         # 添加独立测试命令，不需要牛牛插件启用
         if msg == "定时测试":
             async for result in self.timer_test.test_timer(event):
@@ -439,13 +445,16 @@ class NiuniuPlugin(Star):
             return 0
             
         current_time = time.time()
-        today_start = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, 0))
-
+        # 获取今天的零点时间
+        today_start = time.mktime(time.localtime(current_time)[:3] + (0, 0, 0, 0, 0, 0))
+        
+        # 如果打工开始时间在今天之前，则重置打工时长
         if work_data['start_time'] < today_start:
             return 0
 
+        # 计算从今天零点开始的打工时长
         return min(work_data['duration'], 
-                  (current_time - work_data['start_time']) / 3600)
+                (current_time - today_start) / 3600)
 
     async def _work(self, event):
         """打工功能"""
@@ -1001,7 +1010,7 @@ class NiuniuPlugin(Star):
             return
 
         # 解析目标
-        target_id = self.parse_target(event)
+        target_id = self.parse_target(event, "比划比划")
         if not target_id:
             yield event.plain_result(self.niuniu_texts['compare']['no_target'].format(nickname=nickname))
             return
@@ -1445,7 +1454,7 @@ class NiuniuPlugin(Star):
             return
             
         # 解析目标用户
-        target_id = self.shop.parse_target(event, "调换")
+        target_id = self.parse_target(event, "调换")
         if not target_id:
             yield event.plain_result("❌ 请指定有效的目标用户 (@用户 或 输入用户名)")
             return
@@ -1540,6 +1549,43 @@ class NiuniuPlugin(Star):
         )
         yield event.plain_result(result)
         
+    async def use_lockbreaker(self, event, target_id):
+        """使用破锁锤"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        user_data = self.plugin.get_user_data(group_id, user_id)
+        nickname = event.get_sender_name()
+        
+        if not user_data or not user_data.get('items', {}).get('lockbreaker'):
+            yield event.plain_result("❌ 你没有破锁锤")
+            return
+            
+        # 检查目标是否存在
+        target_data = self.plugin.get_user_data(group_id, target_id)
+        if not target_data:
+            yield event.plain_result("❌ 目标用户未注册牛牛")
+            return
+            
+        # 检查目标是否有贞操锁
+        if not target_data.get('items', {}).get('chastity_lock'):
+            yield event.plain_result(f"❌ {target_data['nickname']}没有装备贞操锁")
+            return
+            
+        # 破除贞操锁
+        del target_data['items']['chastity_lock']
+        
+        # 移除使用者的破锁锤
+        del user_data['items']['lockbreaker']
+        
+        # 清除等待破锁状态
+        user_actions = self.last_actions.setdefault(group_id, {}).setdefault(user_id, {})
+        if 'waiting_for_lockbreaker' in user_actions:
+            del user_actions['waiting_for_lockbreaker']
+        
+        self._save_data()
+        
+        yield event.plain_result(f"✅ 成功破除了 {target_data['nickname']} 的贞操锁！")
+
     async def _handle_dajiao(self, event):
         """处理打胶指令"""
         group_id = str(event.message_obj.group_id)
@@ -1565,4 +1611,3 @@ class NiuniuPlugin(Star):
             return
             
         # 剩余的打胶逻辑...
-
