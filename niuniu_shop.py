@@ -16,7 +16,7 @@ class NiuniuShop:
         6: {"name": "牛子转换器", "price": 300, "description": "可以与目标用户的牛牛长度对调"},
         7: {"name": "春风精灵", "price": 50, "description": "1小时内每次冷却完毕自动打胶并提醒"},
         8: {"name": "贞操锁", "price": 80, "description": "阻止其他用户对你使用道具、比划和锁牛牛，持续时间为48小时"},
-        9: {"name": "破锁锤", "price": 300, "description": "立即破除目标用户的贞操锁"}
+        9: {"name": "破锁锤", "price": 200, "description": "立即破除目标用户的贞操锁"}
     }
     
     def __init__(self, niuniu_plugin):
