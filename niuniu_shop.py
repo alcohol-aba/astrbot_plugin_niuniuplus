@@ -15,8 +15,8 @@ class NiuniuShop:
         5: {"name": "暂时变性手术", "price": 100, "description": "牛牛变为0cm，24h后恢复，期间打工金币翻倍"},
         6: {"name": "牛子转换器", "price": 300, "description": "可以与目标用户的牛牛长度对调"},
         7: {"name": "春风精灵", "price": 50, "description": "1小时内每次冷却完毕自动打胶并提醒"},
-        8: {"name": "贞操锁", "price": 100, "description": "阻止其他用户对你使用道具、比划和锁牛牛,限时48h"},
-        9: {"name": "万能钥匙", "price": 200, "description": "解除目标用户的贞操锁"}
+        8: {"name": "贞操锁", "price": 100, "description": "阻止其他用户对你使用道具、比划和锁牛牛，限时48h"},
+        9: {"name": "万能钥匙", "price": 150, "description": "解除目标用户的贞操锁"}
     }
     
     def __init__(self, niuniu_plugin):
@@ -85,7 +85,8 @@ class NiuniuShop:
             5: lambda u_data: self._handle_gender_surgery(u_data, group_id, user_id, event),
             6: lambda u_data: self._prepare_exchange(u_data, group_id, user_id),
             7: lambda u_data: self._handle_auto_dajiao(u_data, group_id, user_id, event),
-            8: lambda u_data: self._handle_chastity_lock(u_data)
+            8: lambda u_data: self._handle_chastity_lock(u_data),
+            9: lambda u_data: self._handle_chastity_key_purchase(u_data)
         }
         
         result = handlers[item_id](user_data)
@@ -174,7 +175,13 @@ class NiuniuShop:
         items['exchanger'] = True
         self.last_actions.setdefault(group_id, {}).setdefault(user_id, {})['waiting_for_exchange'] = True
         return "✅ 购买成功！请发送\"调换 @用户名\"或\"调换 用户名\"来使用"
-        
+    
+    def _handle_chastity_key_purchase(self, user_data):
+        """贞操钥匙购买处理"""
+        items = user_data.setdefault('items', {})
+        items['chastity_key'] = True
+        return "✅ 购买成功！你获得了一把贞操钥匙，可用于破除他人的贞操锁。请发送 `破锁 @用户` 或 `破锁 用户名来使用`"
+
     def _handle_auto_dajiao(self, user_data, group_id, user_id, event):
         """春风精灵效果处理"""
         # 记录春风精灵购买时间和到期时间
