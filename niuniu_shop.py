@@ -13,10 +13,10 @@ class NiuniuShop:
         3: {"name": "六味地黄丸", "price": 20, "description": "下次比划必胜"},
         4: {"name": "绝育环", "price": 150, "description": "使目标用户无法进行打胶，目标可花费150金币解锁"},
         5: {"name": "暂时变性手术", "price": 100, "description": "牛牛变为0cm，24h后恢复，期间打工金币翻倍"},
-        6: {"name": "牛子转换器", "price": 300, "description": "可以与目标用户的牛牛长度对调"},
+        6: {"name": "牛子转换器", "price": 150, "description": "可以与目标用户的牛牛长度对调"},
         7: {"name": "春风精灵", "price": 50, "description": "1小时内每次冷却完毕自动打胶并提醒"},
-        8: {"name": "贞操锁", "price": 100, "description": "阻止其他用户对你使用道具、比划和锁牛牛，限时48h"},
-        9: {"name": "万能钥匙", "price": 150, "description": "解除目标用户的贞操锁"}
+        8: {"name": "贞操锁", "price": 100, "description": "阻止其他用户对你使用道具、比划和锁牛牛（持续48小时）"},
+        9: {"name": "万能钥匙", "price": 150, "description": "解除目标用户的贞操锁"} 
     }
     
     def __init__(self, niuniu_plugin):
@@ -86,7 +86,7 @@ class NiuniuShop:
             6: lambda u_data: self._prepare_exchange(u_data, group_id, user_id),
             7: lambda u_data: self._handle_auto_dajiao(u_data, group_id, user_id, event),
             8: lambda u_data: self._handle_chastity_lock(u_data),
-            9: lambda u_data: self._handle_chastity_key_purchase(u_data)
+            9: lambda u_data: self._handle_universal_key(u_data, group_id, user_id)
         }
         
         result = handlers[item_id](user_data)
@@ -116,7 +116,39 @@ class NiuniuShop:
             return f"💔 手术失败！牛牛变短一半..获得50金币补偿\n" \
                    f"📏 现在长度：{self.plugin.format_length(user_data['length'])}\n" \
                    f"💰 现有金币：{user_data['coins']}"
-                   
+
+    async def unlock_chastity(self, event, target_id):
+        """使用万能钥匙解除贞操锁"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        user_data = self.plugin.get_user_data(group_id, user_id)
+        nickname = event.get_sender_name()
+        
+        if not user_data or not user_data.get('items', {}).get('universal_key'):
+            yield event.plain_result("❌ 你没有万能钥匙")
+            return
+            
+        target_data = self.plugin.get_user_data(group_id, target_id)
+        if not target_data:
+            yield event.plain_result("❌ 目标用户不存在")
+            return
+            
+        if not target_data.get('items', {}).get('chastity_lock'):
+            yield event.plain_result(f"❌ {target_data['nickname']} 没有装备贞操锁")
+            return
+            
+        # 解除贞操锁
+        del target_data['items']['chastity_lock']
+        del user_data['items']['universal_key']
+        
+        # 清除等待状态
+        user_actions = self.last_actions.setdefault(group_id, {}).setdefault(user_id, {})
+        if 'waiting_unlock' in user_actions:
+            del user_actions['waiting_unlock']
+            
+        self._save_data()
+        yield event.plain_result(f"🔓 成功解除 {target_data['nickname']} 的贞操锁！")
+
     def _handle_pills(self, user_data):
         """六味地黄丸效果处理"""
         items = user_data.setdefault('items', {})
@@ -175,13 +207,7 @@ class NiuniuShop:
         items['exchanger'] = True
         self.last_actions.setdefault(group_id, {}).setdefault(user_id, {})['waiting_for_exchange'] = True
         return "✅ 购买成功！请发送\"调换 @用户名\"或\"调换 用户名\"来使用"
-    
-    def _handle_chastity_key_purchase(self, user_data):
-        """贞操钥匙购买处理"""
-        items = user_data.setdefault('items', {})
-        items['chastity_key'] = True
-        return "✅ 购买成功！你获得了一把贞操钥匙，可用于破除他人的贞操锁。请发送 `破锁 @用户` 或 `破锁 用户名来使用`"
-
+        
     def _handle_auto_dajiao(self, user_data, group_id, user_id, event):
         """春风精灵效果处理"""
         # 记录春风精灵购买时间和到期时间
@@ -262,20 +288,21 @@ class NiuniuShop:
         
         return "✅ 购买成功！春风精灵将在1小时内帮你自动打胶"
         
-    # def _handle_chastity_lock(self, user_data):
-    #     """贞操锁效果处理"""
-    #     items = user_data.setdefault('items', {})
-    #     items['chastity_lock'] = True
-    #     return "✅ 购买成功！你已装备贞操锁，其他用户无法对你使用道具、比划和锁牛牛"
-    
     def _handle_chastity_lock(self, user_data):
-        """贞操锁效果处理（增加48小时时效）"""
+        """贞操锁效果处理"""
         items = user_data.setdefault('items', {})
         items['chastity_lock'] = {
-            'end_time': time.time() + 48 * 3600  # 48小时后自动解除 
+            'expire_time': time.time() + 48 * 3600  # 48小时有效期
         }
-        return "✅ 购买成功！你已装备贞操锁，持续48小时"
+        return "✅ 购买成功！你已装备贞操锁（有效期48小时），其他用户无法对你使用道具、比划和锁牛牛"
 
+    async def _handle_universal_key(self, user_data, group_id, user_id):
+        """万能钥匙购买后准备"""
+        items = user_data.setdefault('items', {})
+        items['universal_key'] = True
+        self.last_actions.setdefault(group_id, {}).setdefault(user_id, {})['waiting_unlock'] = True
+        return "✅ 购买成功！请发送\"解锁 @用户名\"或\"解锁 用户名\"来解除贞操锁"
+    
     # 使用绝育环
     async def use_sterilization(self, event, target_id):
         """使用绝育环"""
@@ -397,31 +424,27 @@ class NiuniuShop:
             return False
         return user_data.get('items', {}).get('sterilized', False)
     
-    # def has_chastity_lock(self, group_id, user_id):
-    #     """检查用户是否有贞操锁"""
-    #     user_data = self.plugin.get_user_data(group_id, user_id)
-    #     if not user_data:
-    #         return False
-    #     return user_data.get('items', {}).get('chastity_lock', False)
     def has_chastity_lock(self, group_id, user_id):
-        """检查用户是否装备了贞操锁（并检查是否超时）"""
         user_data = self.plugin.get_user_data(group_id, user_id)
-        if not user_data:
-            return False
-        
-        chastity_lock = user_data.get('items', {}).get('chastity_lock')
-        if not chastity_lock:
-            return False
-        
-        # 检查是否已过期
-        if time.time() > chastity_lock['end_time']:
-            del user_data['items']['chastity_lock']  # 自动移除
+        lock_data = user_data.get('items', {}).get('chastity_lock')
+        if lock_data and time.time() < lock_data['expire_time']:
+            return True
+        elif lock_data:  # 过期自动清理
+            del user_data['items']['chastity_lock']
             self._save_data()
-            return False
-
-        return True
-
+        return False
     
+    # 在事件处理中添加解锁命令解析
+    async def process_unlock_command(self, event):
+        """处理解锁指令"""
+        target_id = self.parse_target(event, "解锁")
+        if not target_id:
+            yield event.plain_result("❌ 请指定要解锁的目标")
+            return
+            
+        async for result in self.unlock_chastity(event, target_id):
+            yield result
+        
     def is_gender_surgery_active(self, group_id, user_id):
         """检查用户是否正在变性状态"""
         user_data = self.plugin.get_user_data(group_id, user_id)
@@ -528,29 +551,3 @@ class NiuniuShop:
             # 如果消息不是以"购买"开头，则显示商城
             shop_text = self.get_shop_text(user_data.get('coins', 0))
             yield event.plain_result(shop_text)
-    async def _handle_chastity_key(self, event, target_id):
-        """使用贞操钥匙解除目标用户的贞操锁"""
-        group_id = str(event.message_obj.group_id)
-        user_id = str(event.get_sender_id())
-        user_data = self.plugin.get_user_data(group_id, user_id)
-
-        if not user_data or not user_data.get('items', {}).get('chastity_key'):
-            yield event.plain_result("❌ 你没有万能钥匙")
-            return
-
-        target_data = self.plugin.get_user_data(group_id, target_id)
-        if not target_data:
-            yield event.plain_result("❌ 目标用户未注册牛牛")
-            return
-
-        # 检查目标是否有贞操锁
-        if not target_data.get('items', {}).get('chastity_lock'):
-            yield event.plain_result(f"❌ {target_data['nickname']} 没有装备贞操锁")
-            return
-
-        # 解除贞操锁
-        del target_data['items']['chastity_lock']
-        del user_data['items']['chastity_key']
-        self._save_data()
-
-        yield event.plain_result(f"🔓 你成功破除了 {target_data['nickname']} 的贞操锁！")
