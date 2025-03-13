@@ -160,7 +160,8 @@ class NiuniuPlugin(Star):
 🔹 每日签到 - 领取金币奖励
 🔹 牛牛商城 - 购买强力道具
 🔹 打工 - 赚取金币
-🔹 牛牛开/关 - 管理插件"""
+🔹 牛牛开/关 - 管理插件
+2.0"""
             },
             'system': {
                 'enable': "✅ 牛牛插件已启用",
@@ -327,13 +328,18 @@ class NiuniuPlugin(Star):
     # endregion
 
     # region 事件处理
-    niuniu_commands = ["牛牛菜单", "牛牛开", "牛牛关", "注册牛牛", "打胶", "我的牛牛", "比划比划", "牛牛排行", "锁牛牛", "打工", "打工时间", "牛牛日历"]
+    niuniu_commands = ["解锁","牛牛菜单", "牛牛开", "牛牛关", "注册牛牛", "打胶", "我的牛牛", "比划比划", "牛牛排行", "锁牛牛", "打工", "打工时间", "牛牛日历"]
 
     @event_message_type(EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent):
         """群聊消息处理器"""
         group_id = str(event.message_obj.group_id)
         msg = event.message_str.strip()
+
+        if msg.startswith("解锁"):
+            async for result in self.shop.process_unlock_command(event):
+                yield result
+            return
 
         # 添加独立测试命令，不需要牛牛插件启用
         if msg == "定时测试":
@@ -358,14 +364,6 @@ class NiuniuPlugin(Star):
             async for result in self._work_test(event):
                 yield result
             return
-        #破锁
-        if msg.startswith("破锁"):
-            target_id = self.shop.parse_target(event, "破锁")
-            if target_id:
-                async for result in self.shop._handle_chastity_key(event, target_id):
-                    yield result
-                return
-            yield event.plain_result("❌ 请输入正确的目标")
 
         # 添加购买命令的处理
         if msg.startswith("购买"):
@@ -1573,3 +1571,4 @@ class NiuniuPlugin(Star):
             return
             
         # 剩余的打胶逻辑...
+
